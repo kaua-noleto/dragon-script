@@ -10,6 +10,7 @@ end
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local VIM = game:GetService("VirtualInputManager")
 local LP = Players.LocalPlayer
 local Char = LP.Character or LP.CharacterAdded:Wait()
 local Hum = Char:WaitForChild("Humanoid")
@@ -20,24 +21,44 @@ local State = {
     Fly = false,
     AutoCharge = false,
     AutoTrain = false,
+    AutoDefense = false,
     GuiVisible = true
 }
+
+--// ENERGY FUNCTION
+local function GetEnergy()
+    local stats = LP:FindFirstChild("Stats") or LP:FindFirstChild("leaderstats")
+    if stats then
+        local energy = stats:FindFirstChild("Energy") or stats:FindFirstChild("Ki")
+        if energy then
+            return energy.Value, energy.MaxValue or 100
+        end
+    end
+    return 0, 100
+end
+
+--// DEFENSE KEYS
+local function HoldR()
+    VIM:SendKeyEvent(true, Enum.KeyCode.R, false, game)
+end
+
+local function ReleaseR()
+    VIM:SendKeyEvent(false, Enum.KeyCode.R, false, game)
+end
 
 --// GUI
 local Gui = Instance.new("ScreenGui", game.CoreGui)
 Gui.Name = "DragonRageUtility"
 
---// MAIN FRAME
 local Main = Instance.new("Frame", Gui)
-Main.Size = UDim2.new(0, 520, 0, 360)
-Main.Position = UDim2.new(0.5, -260, 0.5, -180)
+Main.Size = UDim2.new(0, 520, 0, 400)
+Main.Position = UDim2.new(0.5, -260, 0.5, -200)
 Main.BackgroundColor3 = Color3.fromRGB(18, 8, 28)
 Main.BorderSizePixel = 0
 Main.Active = true
 Main.Draggable = true
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
 
---// TITLE
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, 0, 0, 45)
 Title.Text = "🟣 Dragon Rage Utility"
@@ -46,7 +67,7 @@ Title.TextSize = 20
 Title.TextColor3 = Color3.fromRGB(190, 130, 255)
 Title.BackgroundTransparency = 1
 
---// SECTION CREATOR
+--// SECTION
 local function Section(text, pos)
     local S = Instance.new("TextLabel", Main)
     S.Text = text
@@ -58,7 +79,7 @@ local function Section(text, pos)
     S.Size = UDim2.new(0, 200, 0, 30)
 end
 
---// TOGGLE BUTTON
+--// TOGGLE
 local function Toggle(text, pos, callback)
     local Btn = Instance.new("TextButton", Main)
     Btn.Size = UDim2.new(0, 200, 0, 34)
@@ -82,13 +103,22 @@ end
 
 --// SECTIONS
 Section("Movement", UDim2.new(0, 20, 0, 60))
-Section("Farm", UDim2.new(0, 280, 0, 60))
+Section("Farm / Training", UDim2.new(0, 280, 0, 60))
 
---// TOGGLES
+--// MOVEMENT
 Toggle("Fly (Lite)", UDim2.new(0, 20, 0, 100), function(v)
     State.Fly = v
 end)
 
+Toggle("WalkSpeed 28", UDim2.new(0, 20, 0, 145), function(v)
+    Hum.WalkSpeed = v and 28 or 16
+end)
+
+Toggle("JumpPower 65", UDim2.new(0, 20, 0, 190), function(v)
+    Hum.JumpPower = v and 65 or 50
+end)
+
+--// FARM
 Toggle("Auto Charge Ki", UDim2.new(0, 280, 0, 100), function(v)
     State.AutoCharge = v
     task.spawn(function()
@@ -113,13 +143,32 @@ Toggle("Auto Train", UDim2.new(0, 280, 0, 145), function(v)
     end)
 end)
 
---// SPEED BUTTONS
-Toggle("WalkSpeed 28", UDim2.new(0, 20, 0, 145), function(v)
-    Hum.WalkSpeed = v and 28 or 16
-end)
+--// AUTO DEFENSE (INTELIGENTE)
+Toggle("Auto Defense (R)", UDim2.new(0, 280, 0, 190), function(v)
+    State.AutoDefense = v
 
-Toggle("JumpPower 65", UDim2.new(0, 20, 0, 190), function(v)
-    Hum.JumpPower = v and 65 or 50
+    task.spawn(function()
+        while State.AutoDefense do
+            local energy, maxEnergy = GetEnergy()
+
+            if energy > 10 then
+                HoldR()
+            else
+                ReleaseR()
+                pcall(function()
+                    game:GetService("ReplicatedStorage").Events.Train:FireServer("Charge")
+                end)
+
+                repeat
+                    task.wait(0.4)
+                    energy = GetEnergy()
+                until energy >= maxEnergy * 0.95 or not State.AutoDefense
+            end
+
+            task.wait(0.2)
+        end
+        ReleaseR()
+    end)
 end)
 
 --// FLY LOOP
@@ -129,7 +178,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
---// EXTERNAL TOGGLE BUTTON (FORA DO GUI)
+--// FLOAT BUTTON (FORA DO GUI)
 local FloatBtn = Instance.new("TextButton", Gui)
 FloatBtn.Size = UDim2.new(0, 50, 0, 50)
 FloatBtn.Position = UDim2.new(0, 20, 0.5, -25)
@@ -146,7 +195,7 @@ FloatBtn.MouseButton1Click:Connect(function()
     Main.Visible = State.GuiVisible
 end)
 
---// RIGHTSHIFT SUPPORT
+--// RIGHT SHIFT
 UIS.InputBegan:Connect(function(i,g)
     if g then return end
     if i.KeyCode == Enum.KeyCode.RightShift then
